@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Tab switching
 function initTabs() {
-    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabButtons = document.querySelectorAll('.nav-btn');
     tabButtons.forEach(btn => {
         btn.addEventListener('click', function() {
             const tabName = this.dataset.tab;
@@ -34,7 +34,7 @@ function initTabs() {
 
 function switchTab(tabName) {
     // Update buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.classList.remove('active');
         if (btn.dataset.tab === tabName) {
             btn.classList.add('active');
@@ -45,7 +45,10 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(content => {
         content.classList.remove('active');
     });
-    document.getElementById(tabName).classList.add('active');
+    const targetTab = document.getElementById(tabName);
+    if (targetTab) {
+        targetTab.classList.add('active');
+    }
 }
 
 // System Status
@@ -125,25 +128,57 @@ function hideAPModeBanner() {
 }
 
 function updateStatusDisplay(status) {
-    // Status bar
-    let wifiStatus;
-    if (status.wifi.ap_mode) {
-        wifiStatus = '📶 AP Mode - Not connected';
-    } else if (status.wifi.connected) {
-        wifiStatus = `✅ ${status.wifi.ssid} (${status.wifi.rssi} dBm)`;
-    } else {
-        wifiStatus = '❌ Disconnected';
+    // Update connection status indicator
+    const statusIndicator = document.querySelector('.status-indicator');
+    const statusText = document.querySelector('.status-text');
+
+    if (statusIndicator && statusText) {
+        if (status.wifi.ap_mode) {
+            statusIndicator.classList.remove('connected');
+            statusText.textContent = 'AP Mode';
+        } else if (status.wifi.connected) {
+            statusIndicator.classList.add('connected');
+            statusText.textContent = 'Connected';
+        } else {
+            statusIndicator.classList.remove('connected');
+            statusText.textContent = 'Disconnected';
+        }
     }
-    document.getElementById('wifiStatus').textContent = wifiStatus;
-    document.getElementById('deviceCount').textContent = `${devices.length} devices`;
 
-    // Dashboard
-    document.getElementById('dashWifi').textContent = status.wifi.ssid || 'Not connected';
-    document.getElementById('dashIP').textContent = status.wifi.ip || 'N/A';
-    document.getElementById('dashUptime').textContent = formatUptime(status.uptime);
+    // Update system info in settings tab
+    const updateElement = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
 
-    const memoryPercent = ((status.storage.total - status.storage.used) / status.storage.total * 100).toFixed(1);
-    document.getElementById('dashMemory').textContent = `${memoryPercent}% free`;
+    updateElement('firmwareVersion', status.version || 'Unknown');
+    updateElement('systemUptime', formatUptime(status.uptime || 0));
+    updateElement('wifiConnected', status.wifi.ssid || 'Not connected');
+    updateElement('ipAddress', status.wifi.ip || 'N/A');
+
+    if (status.wifi.rssi) {
+        updateElement('wifiRssi', `${status.wifi.rssi} dBm`);
+    } else {
+        updateElement('wifiRssi', 'N/A');
+    }
+
+    if (status.storage) {
+        const usedKB = (status.storage.used / 1024).toFixed(1);
+        const totalKB = (status.storage.total / 1024).toFixed(1);
+        updateElement('freeMemory', `${usedKB} / ${totalKB} KB`);
+    }
+
+    // Update device count badge
+    const deviceCountBadge = document.getElementById('deviceCountBadge');
+    if (deviceCountBadge) {
+        deviceCountBadge.textContent = devices.length;
+    }
+
+    // Update rule count badge
+    const ruleCountBadge = document.getElementById('ruleCountBadge');
+    if (ruleCountBadge) {
+        ruleCountBadge.textContent = rules.length;
+    }
 }
 
 function formatUptime(seconds) {
@@ -174,28 +209,51 @@ async function loadDevices() {
 }
 
 function displayDevices() {
-    const container = document.getElementById('devicesList');
+    const container = document.getElementById('devicesGrid');
+    if (!container) return;
 
     if (devices.length === 0) {
-        container.innerHTML = '<p class="loading">No devices found. Click "Discover Devices" to scan.</p>';
+        container.innerHTML = '<div class="empty-state"><p>No devices found. Click "Auto-Discover Devices" to scan your network.</p></div>';
         return;
     }
 
     let html = '';
     devices.forEach(device => {
         const lastSeenStr = device.lastSeen > 0 ? new Date(device.lastSeen).toLocaleString() : 'Never';
+        const statusClass = device.online ? 'online' : 'offline';
+        const statusIcon = device.online ? '✓' : '○';
+
         html += `
-            <div class="device-item">
-                <div class="device-info">
-                    <div class="device-name">${device.name}</div>
-                    <div class="device-details">
-                        IP: ${device.ip} | MAC: ${device.mac}<br>
-                        Power: ${device.lastPower.toFixed(1)} W | Last seen: ${lastSeenStr}
+            <div class="device-card glass-card">
+                <div class="device-header">
+                    <h3 class="device-name">${device.name}</h3>
+                    <span class="device-status ${statusClass}">${statusIcon}</span>
+                </div>
+                <div class="device-info-grid">
+                    <div class="device-info-item">
+                        <span class="label">IP:</span>
+                        <span class="value">${device.ip}</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="label">MAC:</span>
+                        <span class="value">${device.mac}</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="label">Power:</span>
+                        <span class="value">${device.lastPower ? device.lastPower.toFixed(1) + ' W' : 'N/A'}</span>
+                    </div>
+                    <div class="device-info-item">
+                        <span class="label">Last seen:</span>
+                        <span class="value">${lastSeenStr}</span>
                     </div>
                 </div>
                 <div class="device-actions">
-                    <button class="btn btn-primary btn-small" onclick="controlDevice('${device.id}', true)">ON</button>
-                    <button class="btn btn-secondary btn-small" onclick="controlDevice('${device.id}', false)">OFF</button>
+                    <button class="btn btn-success btn-sm" onclick="controlDevice('${device.id}', true)">
+                        <span class="btn-icon">🟢</span> ON
+                    </button>
+                    <button class="btn btn-secondary btn-sm" onclick="controlDevice('${device.id}', false)">
+                        <span class="btn-icon">🔴</span> OFF
+                    </button>
                 </div>
             </div>
         `;
@@ -213,13 +271,54 @@ async function controlDevice(deviceId, state) {
         });
 
         if (response.ok) {
-            alert(`Device ${state ? 'turned ON' : 'turned OFF'} successfully`);
+            showToast(`Device ${state ? 'turned ON' : 'turned OFF'} successfully`, 'success');
             setTimeout(loadDevices, 1000);
         } else {
-            alert('Failed to control device');
+            showToast('Failed to control device', 'error');
         }
     } catch (error) {
         console.error('Control error:', error);
+        showToast('Device control error', 'error');
+    }
+}
+
+// Rules
+async function loadRules() {
+    try {
+        const response = await fetch('/api/rules');
+        const data = await response.json();
+        rules = data.rules || [];
+        displayRules();
+    } catch (error) {
+        console.error('Failed to load rules:', error);
+    }
+}
+
+function displayRules() {
+    const container = document.getElementById('rulesList');
+    if (!container) return;
+
+    if (rules.length === 0) {
+        container.innerHTML = '<p class="empty-state">No automation rules configured. Create your first rule!</p>';
+        return;
+    }
+
+    let html = '';
+    rules.forEach(rule => {
+        html += `
+            <div class="rule-item glass-card">
+                <div class="rule-header">
+                    <h3>${rule.name}</h3>
+                    <span class="rule-status ${rule.enabled ? 'active' : 'inactive'}">
+                        ${rule.enabled ? '✓ Active' : '○ Inactive'}
+                    </span>
+                </div>
+                <p class="rule-description">${rule.description || 'No description'}</p>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
 
 // Extended functions for v2.0
 function toggleTheme() {
