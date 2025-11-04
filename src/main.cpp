@@ -475,6 +475,45 @@ void setupWebServer() {
         request->send(200, "application/json", response);
     });
 
+    // API: Scan WiFi Networks
+    server.on("/api/wifi/scan", HTTP_POST, [](AsyncWebServerRequest *request) {
+        LOG("Starting WiFi network scan...");
+
+        // Perform scan (async scan returns immediately with number of networks found)
+        int networksFound = WiFi.scanNetworks();
+
+        if (networksFound == 0) {
+            LOG("No networks found");
+            request->send(200, "application/json", "{\"networks\":[]}");
+            return;
+        }
+
+        LOGF("Found %d networks", networksFound);
+
+        // Build JSON response
+        JsonDocument doc;
+        JsonArray networks = doc["networks"].to<JsonArray>();
+
+        for (int i = 0; i < networksFound && i < 20; i++) {  // Limit to 20 networks
+            JsonObject network = networks.add<JsonObject>();
+            network["ssid"] = WiFi.SSID(i);
+            network["rssi"] = WiFi.RSSI(i);
+            network["encryption"] = WiFi.encryptionType(i);
+            network["channel"] = WiFi.channel(i);
+
+            LOGF("  %d: %s (%d dBm)", i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+        }
+
+        doc["count"] = networksFound;
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+
+        // Clean up scan results
+        WiFi.scanDelete();
+    });
+
     // API: Current Energy Data
     server.on("/api/energy/current", HTTP_GET, [](AsyncWebServerRequest *request) {
         // Use global measurement (updated by simulation or real meter)

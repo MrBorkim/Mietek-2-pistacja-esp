@@ -427,26 +427,51 @@
 
         <!-- Settings Tab -->
         <section class="tab-content" id="settings">
-            <!-- WiFi Settings -->
+            <!-- WiFi Network Scanner -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="title-icon">📡</span>
+                        Available WiFi Networks
+                    </h2>
+                    <div class="card-actions">
+                        <button id="scanWiFiBtn" class="btn btn-secondary btn-sm" onclick="scanWiFiNetworks()">
+                            <span class="btn-icon">🔍</span>
+                            Scan Networks
+                        </button>
+                    </div>
+                </div>
+                <div id="wifiNetworksList" class="wifi-networks-container">
+                    <p class="empty-state">Click "Scan Networks" to find available WiFi networks</p>
+                </div>
+            </div>
+
+            <!-- WiFi Configuration Form -->
             <div class="glass-card">
                 <h2 class="card-title">
                     <span class="title-icon">📶</span>
                     WiFi Configuration
                 </h2>
+                <p class="info-text">
+                    💡 <strong>Tip:</strong> Scan for networks above or enter your WiFi details manually below.
+                </p>
                 <form id="wifiForm" onsubmit="saveWiFiConfig(event)">
                     <div class="form-group">
-                        <label for="wifiSsid">Network SSID</label>
-                        <input type="text" id="wifiSsid" class="form-input" required>
+                        <label for="wifiSsid">Network SSID *</label>
+                        <input type="text" id="wifiSsid" class="form-input" placeholder="Enter your WiFi network name" required>
+                        <small>The name of your WiFi network (case-sensitive)</small>
                     </div>
                     <div class="form-group">
                         <label for="wifiPassword">Password</label>
-                        <input type="password" id="wifiPassword" class="form-input">
+                        <input type="password" id="wifiPassword" class="form-input" placeholder="Enter WiFi password">
+                        <small>Leave empty for open networks</small>
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <span class="btn-icon">💾</span>
                         Save & Connect
                     </button>
                 </form>
+                <div id="wifiConfigMessage"></div>
             </div>
 
             <!-- System Info -->

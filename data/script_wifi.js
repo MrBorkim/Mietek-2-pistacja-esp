@@ -100,29 +100,150 @@ function showWiFiConfigMessage(type, message) {
 
     // Style based on type
     if (type === 'error') {
-        msg.style.cssText = 'padding: 1rem; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; border-radius: 0.5rem; color: #ef4444; margin-top: 1rem;';
+        msg.style.cssText = 'padding: 1rem; background: rgba(239,68,68,0.1); border: 1px solid #ef4444; border-radius: 0.5rem; color: #ef4444; margin-top: 1rem; white-space: pre-wrap;';
     } else if (type === 'success') {
-        msg.style.cssText = 'padding: 1rem; background: rgba(16,185,129,0.1); border: 1px solid #10b981; border-radius: 0.5rem; color: #10b981; margin-top: 1rem;';
+        msg.style.cssText = 'padding: 1rem; background: rgba(16,185,129,0.1); border: 1px solid #10b981; border-radius: 0.5rem; color: #10b981; margin-top: 1rem; white-space: pre-wrap;';
     } else {
-        msg.style.cssText = 'padding: 1rem; background: rgba(59,130,246,0.1); border: 1px solid #3b82f6; border-radius: 0.5rem; color: #3b82f6; margin-top: 1rem;';
+        msg.style.cssText = 'padding: 1rem; background: rgba(59,130,246,0.1); border: 1px solid #3b82f6; border-radius: 0.5rem; color: #3b82f6; margin-top: 1rem; white-space: pre-wrap;';
     }
 }
 
-// Auto-load WiFi config when Settings tab is opened
-function switchTab(tabName) {
-    // Update navigation buttons
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+// Scan for available WiFi networks
+async function scanWiFiNetworks() {
+    const btn = document.getElementById('scanWiFiBtn');
+    const container = document.getElementById('wifiNetworksList');
+
+    if (!container) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-icon">🔄</span> Scanning...';
+    }
+
+    container.innerHTML = '<div class="loading-spinner"><div class="spinner"></div><p>Scanning for networks...</p></div>';
+
+    try {
+        const response = await fetch('/api/wifi/scan', { method: 'POST' });
+
+        if (!response.ok) {
+            throw new Error('Scan failed');
+        }
+
+        const data = await response.json();
+
+        if (data.networks && data.networks.length > 0) {
+            displayWiFiNetworks(data.networks);
+        } else {
+            container.innerHTML = '<p class="empty-state">No networks found. Try scanning again.</p>';
+        }
+    } catch (error) {
+        console.error('WiFi scan error:', error);
+        container.innerHTML = '<p class="empty-state error">Scan failed. Please try again.</p>';
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="btn-icon">🔍</span> Scan Networks';
+        }
+    }
+}
+
+// Display scanned WiFi networks
+function displayWiFiNetworks(networks) {
+    const container = document.getElementById('wifiNetworksList');
+    if (!container) return;
+
+    // Sort by signal strength
+    networks.sort((a, b) => b.rssi - a.rssi);
+
+    let html = '<div class="wifi-networks-grid">';
+
+    networks.forEach(network => {
+        const signalStrength = getSignalStrength(network.rssi);
+        const securityIcon = network.encryption !== 0 ? '🔒' : '🔓';
+        const signalBars = getSignalBars(network.rssi);
+
+        html += `
+            <div class="wifi-network-item" onclick="selectWiFiNetwork('${escapeHtml(network.ssid)}')">
+                <div class="wifi-network-info">
+                    <div class="wifi-network-name">${securityIcon} ${escapeHtml(network.ssid)}</div>
+                    <div class="wifi-network-details">
+                        <span class="signal-indicator">${signalBars}</span>
+                        <span class="signal-strength">${signalStrength}</span>
+                        <span class="rssi-value">${network.rssi} dBm</span>
+                    </div>
+                </div>
+                <div class="wifi-network-action">
+                    <button type="button" class="btn-icon-only">→</button>
+                </div>
+            </div>
+        `;
     });
 
-    // Update content sections
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === tabName);
-    });
+    html += '</div>';
+    container.innerHTML = html;
+}
 
-    // Load WiFi config when opening settings
-    if (tabName === 'settings') {
-        loadWiFiConfig();
-        loadSystemStatus();
+// Helper functions
+function getSignalStrength(rssi) {
+    if (rssi >= -50) return 'Excellent';
+    if (rssi >= -60) return 'Good';
+    if (rssi >= -70) return 'Fair';
+    return 'Weak';
+}
+
+function getSignalBars(rssi) {
+    if (rssi >= -50) return '📶📶📶📶';
+    if (rssi >= -60) return '📶📶📶';
+    if (rssi >= -70) return '📶📶';
+    return '📶';
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Select a WiFi network from scan results
+function selectWiFiNetwork(ssid) {
+    const ssidInput = document.getElementById('wifiSsid');
+    const passwordInput = document.getElementById('wifiPassword');
+
+    if (ssidInput) {
+        ssidInput.value = ssid;
+        ssidInput.focus();
+    }
+
+    if (passwordInput) {
+        passwordInput.focus();
+    }
+
+    // Scroll to form
+    const form = document.getElementById('wifiForm');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+// Initialize WiFi settings when page loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initWiFiSettings);
+} else {
+    initWiFiSettings();
+}
+
+function initWiFiSettings() {
+    // Load config when settings tab becomes active
+    const settingsTab = document.getElementById('settings');
+    if (settingsTab) {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.target.classList.contains('active')) {
+                    loadWiFiConfig();
+                }
+            });
+        });
+
+        observer.observe(settingsTab, { attributes: true, attributeFilter: ['class'] });
     }
 }
