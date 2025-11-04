@@ -8,6 +8,11 @@ let isAPMode = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
+    // Load theme from localStorage
+    const theme = localStorage.getItem('theme') || 'dark';
+    document.body.setAttribute('data-theme', theme);
+
+    // Initialize app
     initTabs();
     loadSystemStatus();
     loadDevices();
@@ -204,7 +209,10 @@ async function loadDevices() {
         displayDevices();
     } catch (error) {
         console.error('Failed to load devices:', error);
-        document.getElementById('devicesList').innerHTML = '<p class="loading">Error loading devices</p>';
+        const container = document.getElementById('devicesGrid');
+        if (container) {
+            container.innerHTML = '<div class="empty-state error"><p>Error loading devices. Please check connection.</p></div>';
+        }
     }
 }
 
@@ -354,14 +362,3 @@ function closeModal(id) {
 function showRuleBuilder() {
     document.getElementById('ruleBuilderModal').classList.add('active');
 }
-
-// Initialize on load
-document.addEventListener('DOMContentLoaded', function() {
-    const theme = localStorage.getItem('theme') || 'dark';
-    document.body.setAttribute('data-theme', theme);
-    
-    // Apply theme from storage
-    toggleTheme();
-    toggleTheme(); // Toggle twice to apply correct theme
-});
-
