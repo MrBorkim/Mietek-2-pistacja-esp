@@ -647,15 +647,15 @@ void handleEnergyMeter() {
     currentMeasurement.power = consumption - solarBase;  // Negative = export
 
     if (currentMeasurement.power < -100) {
-        currentMeasurement.flow = 1;  // EXPORT
+        currentMeasurement.flow = GridFlowDirection::EXPORT;
         currentMeasurement.gridExportPower = -currentMeasurement.power;
         currentMeasurement.gridImportPower = 0;
     } else if (currentMeasurement.power > 100) {
-        currentMeasurement.flow = 2;  // IMPORT
+        currentMeasurement.flow = GridFlowDirection::IMPORT;
         currentMeasurement.gridImportPower = currentMeasurement.power;
         currentMeasurement.gridExportPower = 0;
     } else {
-        currentMeasurement.flow = 0;  // STANDBY
+        currentMeasurement.flow = GridFlowDirection::STANDBY;
         currentMeasurement.gridImportPower = 0;
         currentMeasurement.gridExportPower = 0;
     }
@@ -669,15 +669,15 @@ void handleEnergyMeter() {
     static int readingCount = 0;
     if (++readingCount >= 10) {
         readingCount = 0;
-        const char* flowStr = currentMeasurement.flow == 1 ? "EXPORT" :
-                              currentMeasurement.flow == 2 ? "IMPORT" : "STANDBY";
+        const char* flowStr = currentMeasurement.flow == GridFlowDirection::EXPORT ? "EXPORT" :
+                              currentMeasurement.flow == GridFlowDirection::IMPORT ? "IMPORT" : "STANDBY";
         LOGF_METER("Power: %.1fW | Voltage: %.1fV | Current: %.2fA | Flow: %s",
                    currentMeasurement.power, currentMeasurement.voltage,
                    currentMeasurement.current, flowStr);
 
-        if (currentMeasurement.flow == 1) {
+        if (currentMeasurement.flow == GridFlowDirection::EXPORT) {
             LOGF_METER("⬆️ Exporting %.1fW to grid", currentMeasurement.gridExportPower);
-        } else if (currentMeasurement.flow == 2) {
+        } else if (currentMeasurement.flow == GridFlowDirection::IMPORT) {
             LOGF_METER("⬇️ Importing %.1fW from grid", currentMeasurement.gridImportPower);
         }
     }
