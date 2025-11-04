@@ -1,0 +1,22 @@
+{
+  "devices": [
+    {
+      "id": "shelly_AA11BB22CC33",
+      "name": "Podgrzewacz wody",
+      "mac": "AA:11:BB:22:CC:33",
+      "ip": "192.168.68.57",
+      "enabled": true,
+      "lastSeen": 0,
+      "lastPower": 0.0
+    },
+    {
+      "id": "shelly_DD44EE55FF66",
+      "name": "Światło kuchnia",
+      "mac": "DD:44:EE:55:FF:66",
+      "ip": "192.168.68.58",
+      "enabled": true,
+      "lastSeen": 0,
+      "lastPower": 0.0
+    }
+  ]
+}

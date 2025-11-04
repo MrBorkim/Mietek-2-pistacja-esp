@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pistachio Smart Controller</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🥜 Pistachio Smart Controller</h1>
+            <p class="subtitle">ESP32 Shelly Manager</p>
+        </header>
+
+        <div class="status-bar" id="statusBar">
+            <span id="wifiStatus">Checking...</span>
+            <span id="deviceCount">0 devices</span>
+        </div>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="devices">Devices</button>
+            <button class="tab-btn" data-tab="rules">Rules</button>
+            <button class="tab-btn" data-tab="settings">Settings</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div class="tab-content active" id="dashboard">
+            <section class="card">
+                <h2>System Status</h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="label">WiFi</span>
+                        <span class="value" id="dashWifi">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">IP Address</span>
+                        <span class="value" id="dashIP">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Uptime</span>
+                        <span class="value" id="dashUptime">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Free Memory</span>
+                        <span class="value" id="dashMemory">-</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Quick Actions</h2>
+                <button class="btn btn-primary" onclick="startDiscovery()">Scan for Devices</button>
+                <button class="btn btn-secondary" onclick="refreshAll()">Refresh Status</button>
+            </section>
+        </div>
+
+        <!-- Devices Tab -->
+        <div class="tab-content" id="devices">
+            <section class="card">
+                <h2>Add Device Manually</h2>
+                <form id="addDeviceForm" onsubmit="addDevice(event)">
+                    <div class="form-group">
+                        <label for="deviceMAC">MAC Address</label>
+                        <input type="text" id="deviceMAC" name="deviceMAC" placeholder="AA:BB:CC:DD:EE:FF" required pattern="[0-9A-Fa-f:]{17}">
+                        <small>Enter MAC address of the Shelly device. IP will be discovered automatically.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceName">Device Name/Description</label>
+                        <input type="text" id="deviceName" name="deviceName" placeholder="e.g., Kitchen Light, Water Heater" required>
+                        <small>Describe what this device controls</small>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Device</button>
+                </form>
+            </section>
+
+            <section class="card">
+                <h2>Shelly Devices</h2>
+                <button class="btn btn-primary" onclick="startDiscovery()">Discover Devices</button>
+                <div id="devicesList" class="devices-list">
+                    <p class="loading">Loading devices...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Rules Tab -->
+        <div class="tab-content" id="rules">
+            <section class="card">
+                <h2>Logic Rules</h2>
+                <button class="btn btn-primary" onclick="showAddRuleDialog()">Add Rule</button>
+                <div id="rulesList" class="rules-list">
+                    <p class="loading">Loading rules...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="settings">
+            <section class="card">
+                <h2>WiFi Configuration</h2>
+                <form id="wifiForm" onsubmit="saveWiFi(event)">
+                    <div class="form-group">
+                        <label for="ssid">WiFi SSID</label>
+                        <input type="text" id="ssid" name="ssid" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">WiFi Password</label>
+                        <input type="password" id="password" name="password">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save & Connect</button>
+                </form>
+            </section>
+
+            <section class="card">
+                <h2>Backend Configuration</h2>
+                <form id="backendForm" onsubmit="saveBackend(event)">
+                    <div class="form-group">
+                        <label for="backendUrl">Backend URL</label>
+                        <input type="text" id="backendUrl" name="backendUrl" placeholder="http://192.168.1.100:5000/api">
+                    </div>
+                    <div class="form-group">
+                        <label for="backendUsername">Username</label>
+                        <input type="text" id="backendUsername" name="backendUsername">
+                    </div>
+                    <div class="form-group">
+                        <label for="backendPassword">Password</label>
+                        <input type="password" id="backendPassword" name="backendPassword">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Backend Settings</button>
+                </form>
+            </section>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+</body>
+</html>

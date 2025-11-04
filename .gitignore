@@ -1,0 +1,28 @@
+# PlatformIO
+.pio/
+.vscode/
+.DS_Store
+
+# Secrets and credentials
+src/secrets.h
+
+# Build artifacts
+*.bin
+*.elf
+*.map
+
+# Logs
+*.log
+
+# Backup files
+*~
+*.bak
+*.swp
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Archive
+firmware.zip
+__MACOSX/
