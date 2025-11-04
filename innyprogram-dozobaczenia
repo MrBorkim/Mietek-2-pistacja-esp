@@ -188,6 +188,55 @@ bool sendShellyToggle(const String &deviceIp, int rpcId, bool on) {
   return (code >= 200 && code < 300);
 }
 
+// Sprawdza czy urządzenie Shelly jest online
+bool checkDeviceOnline(const String &deviceIp) {
+  if (deviceIp.length() == 0) return false;
+  String url = "http://" + deviceIp + "/rpc/Shelly.GetDeviceInfo";
+  HTTPClient http; http.begin(url); http.setTimeout(1000);
+  int code = http.GET();
+  http.end();
+  return (code >= 200 && code < 300);
+}
+
+// Próbuje znaleźć urządzenie po MAC w sieci (gdy IP się zmienił)
+String findDeviceIpByMac(const String &targetMac) {
+  if (targetMac.length() == 0 || WiFi.status() != WL_CONNECTED) return "";
+  IPAddress local = WiFi.localIP();
+  uint8_t base[4] = { local[0], local[1], local[2], 0 };
+
+  Serial.printf("Szukam urządzenia MAC %s w sieci...\n", targetMac.c_str());
+
+  for (int i=1; i<255; i++) {
+    IPAddress ip(base[0], base[1], base[2], i);
+    if (ip == local) continue;
+
+    String url = String("http://") + ip.toString() + "/rpc/Shelly.GetDeviceInfo";
+    HTTPClient http; http.begin(url); http.setTimeout(300);
+    int code = http.GET();
+
+    if (code >= 200 && code < 300) {
+      String payload = http.getString();
+      int p = payload.indexOf("\"mac\"");
+      if (p >= 0) {
+        int q = payload.indexOf('"', p+6);
+        int r = payload.indexOf('"', q+1);
+        if (q > 0 && r > q) {
+          String mac = payload.substring(q+1, r);
+          if (mac.equalsIgnoreCase(targetMac)) {
+            http.end();
+            Serial.printf("Znaleziono! Nowy IP: %s\n", ip.toString().c_str());
+            return ip.toString();
+          }
+        }
+      }
+    }
+    http.end();
+    delay(2);
+  }
+  Serial.println("Nie znaleziono urządzenia w sieci");
+  return "";
+}
+
 // ======= Discover (mDNS + scan) =======
 const unsigned long MDNS_TIMEOUT_MS = 3000;
 
@@ -314,7 +363,7 @@ const char INDEX_HTML[] PROGMEM = R"HTML(
       </div>
       <table>
         <thead>
-          <tr><th>ID</th><th>Nazwa</th><th>MAC</th><th>IP</th><th>Sterowanie</th><th>Usuń</th></tr>
+          <tr><th>ID</th><th>Nazwa</th><th>MAC</th><th>IP</th><th>Status</th><th>Sterowanie</th><th>Usuń</th></tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -331,23 +380,28 @@ const statusEl = S('#status');
 async function loadDevices(){
   try{
     statusEl.textContent = 'Ładowanie...';
-    const r = await fetch('/devices');
+    const r = await fetch('/devices/status');
     if(!r.ok) throw new Error('HTTP '+r.status);
     const arr = await r.json();
     tbody.innerHTML = '';
     if(!Array.isArray(arr) || arr.length===0){
-      tbody.innerHTML = '<tr><td colspan="6" class="muted">Brak urządzeń — dodaj powyżej lub użyj Auto‑discover.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="muted">Brak urządzeń — dodaj powyżej lub użyj Auto‑discover.</td></tr>';
     } else {
       for(const d of arr){
+        const statusText = d.online ? '🟢 Online' : '🔴 Offline';
+        const statusClass = d.online ? 'ok' : 'err';
+        const ipText = d.ip_updated ? `${d.ip} (zaktualizowano)` : d.ip;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${d.id ?? ''}</td>
           <td>${d.name ?? ''}</td>
           <td>${d.mac ?? ''}</td>
-          <td>${d.ip ?? ''}</td>
+          <td>${ipText ?? ''}</td>
+          <td class="${statusClass}">${statusText}</td>
           <td class="row">
-            <button onclick="toggle(${Number(d.id)}, true)">WŁĄCZ</button>
-            <button class="danger" onclick="toggle(${Number(d.id)}, false)">WYŁĄCZ</button>
+            <button onclick="toggle(${Number(d.id)}, true)" ${!d.online ? 'disabled' : ''}>WŁĄCZ</button>
+            <button class="danger" onclick="toggle(${Number(d.id)}, false)" ${!d.online ? 'disabled' : ''}>WYŁĄCZ</button>
           </td>
           <td><button class="danger" onclick="delDevice(${Number(d.id)})">Usuń</button></td>`;
         tbody.appendChild(tr);
@@ -423,7 +477,13 @@ async function saveWifi(){
   }catch(e){ msg.textContent='Błąd Wi‑Fi: '+e.message; statusEl.textContent='Błąd'; statusEl.className='pill err'; }
 }
 
+// Początkowe załadowanie urządzeń
 loadDevices();
+
+// Auto-refresh statusu co 10 sekund
+setInterval(() => {
+  loadDevices();
+}, 10000);
 </script>
 </body>
 </html>
@@ -468,6 +528,67 @@ void handleGetDevices() {
   String out; serializeJsonPretty(arr, out); server.send(200, "application/json", out);
 }
 
+void handleGetDevicesStatus() {
+  StaticJsonDocument<4096> doc; JsonArray arr = doc.to<JsonArray>();
+  for (auto &d : devices) {
+    JsonObject o = arr.createNestedObject();
+    o["id"] = d.id;
+    o["name"] = d.name;
+    o["mac"] = d.mac;
+    o["ip"] = d.ip;
+
+    // Sprawdź czy urządzenie jest online
+    bool online = checkDeviceOnline(d.ip);
+    o["online"] = online;
+
+    // Jeśli offline i mamy MAC, spróbuj znaleźć nowy IP
+    if (!online && d.mac.length() > 0) {
+      Serial.printf("Urządzenie %s (id=%d) offline, próbuję znaleźć nowy IP...\n", d.name.c_str(), d.id);
+      String newIp = findDeviceIpByMac(d.mac);
+      if (newIp.length() > 0 && newIp != d.ip) {
+        d.ip = newIp;
+        o["ip"] = newIp;
+        o["online"] = true;
+        o["ip_updated"] = true;
+        saveConfig();
+        Serial.printf("Zaktualizowano IP dla %s: %s\n", d.name.c_str(), newIp.c_str());
+      } else {
+        o["ip_updated"] = false;
+      }
+    } else {
+      o["ip_updated"] = false;
+    }
+  }
+  String out; serializeJsonPretty(arr, out);
+  server.send(200, "application/json", out);
+}
+
+void handleDeleteDevice() {
+  if (server.method() != HTTP_POST) { server.send(405); return; }
+  if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"no body\"}"); return; }
+  String body = server.arg("plain"); StaticJsonDocument<256> doc;
+  if (deserializeJson(doc, body)) { server.send(400, "application/json", "{\"error\":\"invalid json\"}"); return; }
+  int id = doc["id"] | -1;
+  if (id < 0) { server.send(400, "application/json", "{\"error\":\"id missing\"}"); return; }
+
+  bool found = false;
+  for (size_t i = 0; i < devices.size(); i++) {
+    if (devices[i].id == id) {
+      devices.erase(devices.begin() + i);
+      found = true;
+      break;
+    }
+  }
+
+  if (found && saveConfig()) {
+    server.send(200, "application/json", "{\"ok\":true}");
+  } else if (!found) {
+    server.send(404, "application/json", "{\"error\":\"device not found\"}");
+  } else {
+    server.send(500, "application/json", "{\"ok\":false}");
+  }
+}
+
 void handlePostDevice() {
   if (server.method() != HTTP_POST) { server.send(405); return; }
   if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"no body\"}"); return; }
@@ -486,7 +607,28 @@ void handleToggle() {
   if (!server.hasArg("id")) { server.send(400, "application/json", "{\"error\":\"id missing\"}"); return; }
   int id = server.arg("id").toInt(); bool on=false;
   if (server.hasArg("on")) { String v = server.arg("on"); on = (v=="1" || v.equalsIgnoreCase("true")); }
+
   for (auto &d : devices) if (d.id==id) {
+    // Najpierw sprawdź czy urządzenie jest online
+    bool online = checkDeviceOnline(d.ip);
+
+    // Jeśli offline i mamy MAC, spróbuj znaleźć nowy IP
+    if (!online && d.mac.length() > 0) {
+      Serial.printf("Urządzenie %s offline, szukam nowego IP...\n", d.name.c_str());
+      String newIp = findDeviceIpByMac(d.mac);
+      if (newIp.length() > 0 && newIp != d.ip) {
+        d.ip = newIp;
+        saveConfig();
+        online = true;
+        Serial.printf("Znaleziono nowy IP: %s\n", newIp.c_str());
+      }
+    }
+
+    if (!online) {
+      server.send(503, "application/json", "{\"ok\":false,\"error\":\"device offline\"}");
+      return;
+    }
+
     bool ok = sendShellyToggle(d.ip, id, on);
     if (ok) server.send(200, "application/json", "{\"ok\":true}");
     else server.send(502, "application/json", "{\"ok\":false,\"note\":\"http request failed\"}");
@@ -505,14 +647,42 @@ void handleDiscover() {
   server.send(200, "application/json", out);
 }
 
+void handlePostWifi() {
+  if (server.method() != HTTP_POST) { server.send(405); return; }
+  if (!server.hasArg("plain")) { server.send(400, "application/json", "{\"error\":\"no body\"}"); return; }
+  String body = server.arg("plain"); StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, body)) { server.send(400, "application/json", "{\"error\":\"invalid json\"}"); return; }
+
+  const char* ssid = doc["ssid"] | "";
+  const char* pass = doc["pass"] | "";
+  if (strlen(ssid) == 0) { server.send(400, "application/json", "{\"error\":\"ssid required\"}"); return; }
+
+  wifi_ssid = String(ssid);
+  wifi_pass = String(pass);
+  saveConfig();
+
+  bool connected = tryConnectWiFi();
+  StaticJsonDocument<256> resp;
+  resp["ok"] = true;
+  resp["connected"] = connected;
+  if (connected) {
+    resp["ip"] = WiFi.localIP().toString();
+  }
+  String out; serializeJson(resp, out);
+  server.send(200, "application/json", out);
+}
+
 void setupRoutes() {
   server.on("/", HTTP_GET, handleIndex);
   server.on("/config", HTTP_GET, handleGetConfig);
   server.on("/config", HTTP_POST, handlePostConfig);
   server.on("/devices", HTTP_GET, handleGetDevices);
   server.on("/devices", HTTP_POST, handlePostDevice);
+  server.on("/devices/status", HTTP_GET, handleGetDevicesStatus);
+  server.on("/devices/delete", HTTP_POST, handleDeleteDevice);
   server.on("/toggle", HTTP_GET, handleToggle);
   server.on("/discover", HTTP_GET, handleDiscover);
+  server.on("/wifi", HTTP_POST, handlePostWifi);
   server.onNotFound([](){ server.send(404, "text/plain", "Not found"); });
   server.begin();
 }
