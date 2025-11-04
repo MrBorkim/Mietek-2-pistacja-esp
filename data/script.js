@@ -4,6 +4,7 @@
 let devices = [];
 let rules = [];
 let systemStatus = {};
+let isAPMode = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -11,6 +12,9 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSystemStatus();
     loadDevices();
     loadRules();
+
+    // Check if in AP mode and show banner
+    checkAPMode();
 
     // Auto-refresh every 30 seconds
     setInterval(loadSystemStatus, 30000);
@@ -50,18 +54,86 @@ async function loadSystemStatus() {
         const response = await fetch('/api/status');
         const data = await response.json();
         systemStatus = data;
+        isAPMode = data.wifi.ap_mode || false;
         updateStatusDisplay(data);
+        updateAPModeBanner();
     } catch (error) {
         console.error('Failed to load system status:', error);
         document.getElementById('wifiStatus').textContent = 'Error';
     }
 }
 
+// Check and display AP mode banner
+function checkAPMode() {
+    if (isAPMode) {
+        showAPModeBanner();
+    }
+}
+
+function updateAPModeBanner() {
+    if (isAPMode) {
+        showAPModeBanner();
+    } else {
+        hideAPModeBanner();
+    }
+}
+
+function showAPModeBanner() {
+    let banner = document.getElementById('apModeBanner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'apModeBanner';
+        banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            z-index: 9999;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        `;
+        banner.innerHTML = `
+            ⚠️ <strong>ACCESS POINT MODE</strong> - Configure WiFi in Settings to connect to your network
+            <button onclick="switchTab('settings'); hideAPModeBanner();" style="
+                margin-left: 1rem;
+                padding: 0.5rem 1rem;
+                background: white;
+                color: #d97706;
+                border: none;
+                border-radius: 0.5rem;
+                font-weight: 600;
+                cursor: pointer;
+            ">Configure WiFi →</button>
+        `;
+        document.body.insertBefore(banner, document.body.firstChild);
+
+        // Adjust body padding to account for banner
+        document.body.style.paddingTop = '4rem';
+    }
+}
+
+function hideAPModeBanner() {
+    const banner = document.getElementById('apModeBanner');
+    if (banner) {
+        banner.remove();
+        document.body.style.paddingTop = '0';
+    }
+}
+
 function updateStatusDisplay(status) {
     // Status bar
-    const wifiStatus = status.wifi.connected ?
-        `Connected: ${status.wifi.ssid} (${status.wifi.rssi} dBm)` :
-        'Disconnected';
+    let wifiStatus;
+    if (status.wifi.ap_mode) {
+        wifiStatus = '📶 AP Mode - Not connected';
+    } else if (status.wifi.connected) {
+        wifiStatus = `✅ ${status.wifi.ssid} (${status.wifi.rssi} dBm)`;
+    } else {
+        wifiStatus = '❌ Disconnected';
+    }
     document.getElementById('wifiStatus').textContent = wifiStatus;
     document.getElementById('deviceCount').textContent = `${devices.length} devices`;
 

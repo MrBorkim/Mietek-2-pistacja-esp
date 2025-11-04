@@ -27,8 +27,12 @@
 // Backend API Configuration (Optional)
 // ============================================================================
 // If you have a backend server for data aggregation
-#define BACKEND_API_URL "http://192.168.1.100:5000/api"
-#define BACKEND_API_KEY "your-secret-api-key"
+#ifndef BACKEND_API_URL
+    #define BACKEND_API_URL "http://192.168.1.100:5000/api"
+#endif
+#ifndef BACKEND_API_KEY
+    #define BACKEND_API_KEY "your-secret-api-key"
+#endif
 #define BACKEND_USERNAME ""
 #define BACKEND_PASSWORD ""
 

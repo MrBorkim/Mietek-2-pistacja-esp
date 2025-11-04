@@ -65,7 +65,7 @@ struct EnergyMeasurement {
     float energyTotal;
     float frequency;
     float powerFactor;
-    int flow;  // 0=standby, 1=export, 2=import
+    GridFlowDirection flow;  // STANDBY, EXPORT, or IMPORT
     float gridExportPower;
     float gridImportPower;
     bool valid;
@@ -73,7 +73,7 @@ struct EnergyMeasurement {
     EnergyMeasurement() :
         timestamp(0), voltage(230.0), current(0), power(0),
         energyTotal(0), frequency(50.0), powerFactor(1.0),
-        flow(0), gridExportPower(0), gridImportPower(0), valid(true) {}
+        flow(GridFlowDirection::STANDBY), gridExportPower(0), gridImportPower(0), valid(true) {}
 };
 
 EnergyMeasurement currentMeasurement;
@@ -86,6 +86,18 @@ unsigned long lastRuleEvaluation = 0;
 unsigned long lastDiscovery = 0;
 bool systemReady = false;
 String deviceMAC = "";
+bool isAPMode = false;
+
+// WiFi Configuration Structure
+struct WiFiConfig {
+    String ssid;
+    String password;
+    bool configured;
+
+    WiFiConfig() : ssid(""), password(""), configured(false) {}
+};
+
+WiFiConfig wifiConfig;
 
 // ============================================================================
 // Function Prototypes
@@ -97,6 +109,10 @@ void setupMDNS();
 void handleEnergyMeter();
 void handleRuleEngine();
 void printSystemInfo();
+bool loadWiFiConfig();
+bool saveWiFiConfig(const String& ssid, const String& password);
+void startAPMode();
+bool connectToWiFi(const String& ssid, const String& password);
 
 // ============================================================================
 // Setup - Runs once at startup
@@ -173,38 +189,161 @@ void loop() {
 }
 
 // ============================================================================
-// WiFi Setup
+// WiFi Configuration Management
 // ============================================================================
-void setupWiFi() {
+bool loadWiFiConfig() {
+    if (!LittleFS.exists("/wifi_config.json")) {
+        LOG("No WiFi configuration found");
+        return false;
+    }
+
+    File file = LittleFS.open("/wifi_config.json", "r");
+    if (!file) {
+        LOGE("Failed to open WiFi config file");
+        return false;
+    }
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        LOGEF("Failed to parse WiFi config: %s", error.c_str());
+        return false;
+    }
+
+    wifiConfig.ssid = doc["ssid"].as<String>();
+    wifiConfig.password = doc["password"].as<String>();
+    wifiConfig.configured = doc["configured"] | false;
+
+    if (wifiConfig.ssid.length() == 0) {
+        LOG("WiFi config empty");
+        return false;
+    }
+
+    LOGF("Loaded WiFi config: %s", wifiConfig.ssid.c_str());
+    return true;
+}
+
+bool saveWiFiConfig(const String& ssid, const String& password) {
+    JsonDocument doc;
+    doc["ssid"] = ssid;
+    doc["password"] = password;
+    doc["configured"] = true;
+
+    File file = LittleFS.open("/wifi_config.json", "w");
+    if (!file) {
+        LOGE("Failed to save WiFi config");
+        return false;
+    }
+
+    serializeJson(doc, file);
+    file.close();
+
+    wifiConfig.ssid = ssid;
+    wifiConfig.password = password;
+    wifiConfig.configured = true;
+
+    LOGF("Saved WiFi config: %s", ssid.c_str());
+    return true;
+}
+
+void startAPMode() {
+    LOG("Starting Access Point mode...");
+
+    String apSSID = String(AP_SSID_PREFIX) + "-" + WiFi.macAddress().substring(12);
+    apSSID.replace(":", "");  // Remove colons from MAC
+
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(apSSID.c_str(), AP_PASSWORD);
+
+    isAPMode = true;
+
+    Serial.println();
+    Serial.println("╔════════════════════════════════════════════════════════╗");
+    Serial.println("║          🥜 PISTACHIO - ACCESS POINT MODE              ║");
+    Serial.println("╠════════════════════════════════════════════════════════╣");
+    Serial.printf("║  SSID:     %-43s ║\n", apSSID.c_str());
+    Serial.printf("║  Password: %-43s ║\n", AP_PASSWORD);
+    Serial.printf("║  IP:       %-43s ║\n", WiFi.softAPIP().toString().c_str());
+    Serial.println("╠════════════════════════════════════════════════════════╣");
+    Serial.println("║  1. Connect to this WiFi network                      ║");
+    Serial.println("║  2. Open browser: http://192.168.4.1                  ║");
+    Serial.println("║  3. Configure your WiFi in Settings tab               ║");
+    Serial.println("╚════════════════════════════════════════════════════════╝");
+    Serial.println();
+}
+
+bool connectToWiFi(const String& ssid, const String& password) {
     LOG("Connecting to WiFi...");
+    LOGF("SSID: %s", ssid.c_str());
 
     WiFi.mode(WIFI_STA);
-    WiFi.begin(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
+    WiFi.begin(ssid.c_str(), password.c_str());
 
     unsigned long startTime = millis();
+    int dots = 0;
     while (WiFi.status() != WL_CONNECTED && millis() - startTime < WIFI_CONNECT_TIMEOUT) {
         delay(500);
         Serial.print(".");
+        if (++dots % 60 == 0) Serial.println();
     }
+    Serial.println();
 
     if (WiFi.status() == WL_CONNECTED) {
+        isAPMode = false;
+        Serial.println("╔════════════════════════════════════════════════════════╗");
+        Serial.println("║          ✅ CONNECTED TO WIFI                          ║");
+        Serial.println("╠════════════════════════════════════════════════════════╣");
+        Serial.printf("║  SSID:   %-45s ║\n", ssid.c_str());
+        Serial.printf("║  IP:     %-45s ║\n", WiFi.localIP().toString().c_str());
+        Serial.printf("║  RSSI:   %-42d dBm ║\n", WiFi.RSSI());
+        Serial.printf("║  MAC:    %-45s ║\n", WiFi.macAddress().c_str());
+        Serial.println("╠════════════════════════════════════════════════════════╣");
+        Serial.printf("║  Web Interface: http://%-27s ║\n", WiFi.localIP().toString().c_str());
+        Serial.println("║                 http://pistachio-controller.local     ║");
+        Serial.println("╚════════════════════════════════════════════════════════╝");
         Serial.println();
-        LOGF("✅ Connected to WiFi: %s", DEFAULT_WIFI_SSID);
-        LOGF("IP Address: %s", WiFi.localIP().toString().c_str());
-        LOGF("Signal Strength: %d dBm", WiFi.RSSI());
-    } else {
-        Serial.println();
-        LOGW("Failed to connect to WiFi");
-        LOGW("Starting Access Point mode...");
-
-        // Start AP mode
-        String apSSID = String(AP_SSID_PREFIX) + "-" + WiFi.macAddress().substring(12);
-        WiFi.softAP(apSSID.c_str(), AP_PASSWORD);
-
-        LOGF("AP Started: %s", apSSID.c_str());
-        LOGF("AP IP: %s", WiFi.softAPIP().toString().c_str());
-        LOGF("AP Password: %s", AP_PASSWORD);
+        return true;
     }
+
+    LOGW("Failed to connect to WiFi");
+    return false;
+}
+
+// ============================================================================
+// WiFi Setup (Smart Logic)
+// ============================================================================
+void setupWiFi() {
+    // Strategy:
+    // 1. Try to load saved WiFi config from LittleFS
+    // 2. If no config → start AP mode immediately
+    // 3. If config exists → try to connect
+    // 4. If connection fails → start AP mode as fallback
+
+    LOG("Initializing WiFi...");
+
+    // Try to load saved configuration
+    bool hasConfig = loadWiFiConfig();
+
+    if (!hasConfig) {
+        // No configuration → go straight to AP mode
+        LOG("No WiFi configuration found - starting AP mode");
+        startAPMode();
+        return;
+    }
+
+    // Configuration exists → try to connect
+    LOG("WiFi configuration found - attempting to connect");
+
+    if (connectToWiFi(wifiConfig.ssid, wifiConfig.password)) {
+        // Success!
+        return;
+    }
+
+    // Connection failed → fallback to AP mode
+    LOGW("Failed to connect - starting AP mode as fallback");
+    startAPMode();
 }
 
 // ============================================================================
@@ -257,16 +396,79 @@ void setupWebServer() {
         doc["version"] = FIRMWARE_VERSION;
         doc["uptime"] = millis() / 1000;
         doc["wifi"]["connected"] = WiFi.status() == WL_CONNECTED;
-        doc["wifi"]["ssid"] = WiFi.SSID();
-        doc["wifi"]["ip"] = WiFi.localIP().toString();
+        doc["wifi"]["ap_mode"] = isAPMode;
+        doc["wifi"]["ssid"] = isAPMode ? "" : WiFi.SSID();
+        doc["wifi"]["ip"] = isAPMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
         doc["wifi"]["rssi"] = WiFi.RSSI();
         doc["wifi"]["mac"] = WiFi.macAddress();
+        doc["wifi"]["configured"] = wifiConfig.configured;
 
         size_t total = LittleFS.totalBytes();
         size_t used = LittleFS.usedBytes();
         doc["storage"]["total"] = total;
         doc["storage"]["used"] = used;
         doc["storage"]["free"] = total - used;
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
+    // API: WiFi Configuration (Save and Connect)
+    server.on("/api/wifi/config", HTTP_POST, [](AsyncWebServerRequest *request) {},
+              NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len,
+                      size_t index, size_t total) {
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, data, len);
+
+        if (error) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+
+        String ssid = doc["ssid"].as<String>();
+        String password = doc["password"].as<String>();
+
+        if (ssid.length() == 0) {
+            request->send(400, "application/json", "{\"error\":\"SSID required\"}");
+            return;
+        }
+
+        // Save configuration
+        if (!saveWiFiConfig(ssid, password)) {
+            request->send(500, "application/json", "{\"error\":\"Failed to save config\"}");
+            return;
+        }
+
+        // Send immediate response
+        JsonDocument response;
+        response["success"] = true;
+        response["message"] = "Configuration saved. Connecting...";
+
+        String responseStr;
+        serializeJson(response, responseStr);
+        request->send(200, "application/json", responseStr);
+
+        // Try to connect (after short delay to let response send)
+        delay(1000);
+
+        LOG("Attempting to connect to new WiFi...");
+
+        if (connectToWiFi(ssid, password)) {
+            LOG("Successfully connected! Restarting web server...");
+            // Restart will happen automatically in loop when WiFi state changes
+        } else {
+            LOGW("Connection failed - staying in AP mode");
+        }
+    });
+
+    // API: Get WiFi Configuration
+    server.on("/api/wifi/config", HTTP_GET, [](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        doc["ssid"] = wifiConfig.ssid;
+        doc["configured"] = wifiConfig.configured;
+        doc["ap_mode"] = isAPMode;
+        // Don't send password for security
 
         String response;
         serializeJson(doc, response);
