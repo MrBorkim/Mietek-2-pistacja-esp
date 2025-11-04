@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1a2e">
+    <meta name="description" content="Pistachio Smart Controller - Inteligentne zarządzanie energią z ESP32">
+    <title>🥜 Pistachio Smart Controller</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+</head>
+<body data-theme="dark">
+    <!-- Header with Theme Toggle -->
+    <header class="glass-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-icon">🥜</div>
+                <div class="logo-text">
+                    <h1>Pistachio Smart Controller</h1>
+                    <p class="subtitle">ESP32 Energy Management System</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+                    <span class="theme-icon">🌙</span>
+                </button>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-indicator"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Navigation -->
+    <nav class="main-nav glass">
+        <button class="nav-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Dashboard</span>
+        </button>
+        <button class="nav-btn" data-tab="energy" onclick="switchTab('energy')">
+            <span class="nav-icon">⚡</span>
+            <span class="nav-text">Energy</span>
+        </button>
+        <button class="nav-btn" data-tab="devices" onclick="switchTab('devices')">
+            <span class="nav-icon">🔌</span>
+            <span class="nav-text">Devices</span>
+        </button>
+        <button class="nav-btn" data-tab="rules" onclick="switchTab('rules')">
+            <span class="nav-icon">🎯</span>
+            <span class="nav-text">Rules</span>
+        </button>
+        <button class="nav-btn" data-tab="settings" onclick="switchTab('settings')">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-text">Settings</span>
+        </button>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container">
+        <!-- Dashboard Tab -->
+        <section class="tab-content active" id="dashboard">
+            <!-- Energy Flow Visualization -->
+            <div class="glass-card energy-flow-card">
+                <h2 class="card-title">
+                    <span class="title-icon">🔄</span>
+                    Energy Flow
+                </h2>
+                <div class="energy-flow">
+                    <div class="energy-source">
+                        <div class="energy-icon solar-icon">☀️</div>
+                        <div class="energy-label">Solar</div>
+                        <div class="energy-value" id="solarPower">0 W</div>
+                        <div class="energy-subvalue" id="solarEnergy">0 kWh today</div>
+                    </div>
+
+                    <div class="energy-arrows">
+                        <div class="arrow arrow-solar" id="arrowSolar">
+                            <div class="arrow-flow"></div>
+                        </div>
+                        <div class="arrow arrow-grid" id="arrowGrid">
+                            <div class="arrow-flow"></div>
+                        </div>
+                    </div>
+
+                    <div class="energy-center">
+                        <div class="energy-icon home-icon">🏠</div>
+                        <div class="energy-label">Home</div>
+                        <div class="energy-value" id="homePower">0 W</div>
+                    </div>
+
+                    <div class="energy-arrows">
+                        <div class="arrow arrow-consumption" id="arrowConsumption">
+                            <div class="arrow-flow"></div>
+                        </div>
+                    </div>
+
+                    <div class="energy-source">
+                        <div class="energy-icon grid-icon">🔌</div>
+                        <div class="energy-label">Grid</div>
+                        <div class="energy-value" id="gridPower">0 W</div>
+                        <div class="energy-status" id="gridStatus">Standby</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="stat-card glass">
+                    <div class="stat-icon">⚡</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Current Power</div>
+                        <div class="stat-value" id="currentPower">0 W</div>
+                        <div class="stat-change positive" id="powerChange">—</div>
+                    </div>
+                </div>
+
+                <div class="stat-card glass">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Energy Today</div>
+                        <div class="stat-value" id="energyToday">0 kWh</div>
+                        <div class="stat-change positive" id="energyChange">—</div>
+                    </div>
+                </div>
+
+                <div class="stat-card glass">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Savings Today</div>
+                        <div class="stat-value" id="savingsToday">0 PLN</div>
+                        <div class="stat-change positive" id="savingsChange">—</div>
+                    </div>
+                </div>
+
+                <div class="stat-card glass">
+                    <div class="stat-icon">🎯</div>
+                    <div class="stat-content">
+                        <div class="stat-label">Active Rules</div>
+                        <div class="stat-value" id="activeRules">0</div>
+                        <div class="stat-subtext" id="rulesSubtext">of 0 total</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Power Chart -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="title-icon">📊</span>
+                        Power History (24h)
+                    </h2>
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="refreshChart()">
+                            <span class="btn-icon">🔄</span>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Active Devices & Rules -->
+            <div class="dashboard-grid">
+                <div class="glass-card">
+                    <h2 class="card-title">
+                        <span class="title-icon">🔌</span>
+                        Active Devices
+                    </h2>
+                    <div class="device-list-compact" id="dashboardDevices">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Loading devices...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <h2 class="card-title">
+                        <span class="title-icon">🎯</span>
+                        Active Rules
+                    </h2>
+                    <div class="rule-list-compact" id="dashboardRules">
+                        <div class="loading-spinner">
+                            <div class="spinner"></div>
+                            <p>Loading rules...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Energy Tab -->
+        <section class="tab-content" id="energy">
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">📊</span>
+                    Energy Meter Configuration
+                </h2>
+
+                <div class="meter-config">
+                    <div class="form-group">
+                        <label for="meterType">Meter Type</label>
+                        <select id="meterType" class="form-select" onchange="updateMeterForm()">
+                            <option value="">-- Select Meter Type --</option>
+                            <option value="shelly_em">Shelly EM</option>
+                            <option value="shelly_3em">Shelly 3EM</option>
+                            <option value="pzem">PZEM-004T-100A</option>
+                        </select>
+                    </div>
+
+                    <div id="shellyMeterForm" class="meter-form" style="display: none;">
+                        <div class="form-group">
+                            <label for="shellyMac">MAC Address</label>
+                            <input type="text" id="shellyMac" class="form-input" placeholder="AA:BB:CC:DD:EE:FF" pattern="[0-9A-Fa-f:]{17}">
+                        </div>
+                        <div class="form-group">
+                            <label for="shellyIp">IP Address (optional)</label>
+                            <input type="text" id="shellyIp" class="form-input" placeholder="192.168.1.50">
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="shellyCt1" checked>
+                            <label for="shellyCt1">CT1 Enabled (Grid)</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="shellyCt2">
+                            <label for="shellyCt2">CT2 Enabled (Solar)</label>
+                        </div>
+                    </div>
+
+                    <div id="pzemMeterForm" class="meter-form" style="display: none;">
+                        <div class="form-group">
+                            <label for="pzemAddress">Modbus Address</label>
+                            <input type="number" id="pzemAddress" class="form-input" value="1" min="1" max="247">
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="pzemInvert">
+                            <label for="pzemInvert">Invert Power Direction</label>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="saveMeterConfig()">
+                        <span class="btn-icon">💾</span>
+                        Save Configuration
+                    </button>
+                </div>
+            </div>
+
+            <!-- Live Meter Data -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="title-icon">⚡</span>
+                        Live Meter Data
+                    </h2>
+                    <div class="update-indicator" id="meterUpdate">
+                        <span class="update-dot"></span>
+                        <span class="update-text">Updating...</span>
+                    </div>
+                </div>
+
+                <div class="meter-data-grid">
+                    <div class="meter-data-item">
+                        <div class="meter-icon">⚡</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Voltage</div>
+                            <div class="meter-value" id="meterVoltage">— V</div>
+                        </div>
+                    </div>
+                    <div class="meter-data-item">
+                        <div class="meter-icon">🔌</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Current</div>
+                            <div class="meter-value" id="meterCurrent">— A</div>
+                        </div>
+                    </div>
+                    <div class="meter-data-item">
+                        <div class="meter-icon">⚡</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Power</div>
+                            <div class="meter-value" id="meterPower">— W</div>
+                        </div>
+                    </div>
+                    <div class="meter-data-item">
+                        <div class="meter-icon">📊</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Energy</div>
+                            <div class="meter-value" id="meterEnergy">— kWh</div>
+                        </div>
+                    </div>
+                    <div class="meter-data-item">
+                        <div class="meter-icon">🎵</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Frequency</div>
+                            <div class="meter-value" id="meterFrequency">— Hz</div>
+                        </div>
+                    </div>
+                    <div class="meter-data-item">
+                        <div class="meter-icon">📐</div>
+                        <div class="meter-info">
+                            <div class="meter-label">Power Factor</div>
+                            <div class="meter-value" id="meterPowerFactor">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Energy Statistics -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">📈</span>
+                    Energy Statistics
+                </h2>
+                <div class="stats-tabs">
+                    <button class="stats-tab active" onclick="loadStats('day')">Today</button>
+                    <button class="stats-tab" onclick="loadStats('week')">Week</button>
+                    <button class="stats-tab" onclick="loadStats('month')">Month</button>
+                </div>
+                <div class="chart-container">
+                    <canvas id="energyStatsChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Devices Tab -->
+        <section class="tab-content" id="devices">
+            <!-- Add Device -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">➕</span>
+                    Add Shelly Device
+                </h2>
+                <div class="add-device-actions">
+                    <button class="btn btn-primary" onclick="startDiscovery()">
+                        <span class="btn-icon">🔍</span>
+                        Auto-Discover Devices
+                    </button>
+                    <button class="btn btn-secondary" onclick="showManualAddDialog()">
+                        <span class="btn-icon">✏️</span>
+                        Add Manually
+                    </button>
+                </div>
+            </div>
+
+            <!-- Devices List -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="title-icon">🔌</span>
+                        Shelly Devices
+                        <span class="device-count" id="deviceCountBadge">0</span>
+                    </h2>
+                    <div class="card-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="refreshDevices()">
+                            <span class="btn-icon">🔄</span>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="devices-grid" id="devicesGrid">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <p>Loading devices...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Rules Tab -->
+        <section class="tab-content" id="rules">
+            <!-- Add Rule -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="title-icon">🎯</span>
+                        Automation Rules
+                        <span class="device-count" id="ruleCountBadge">0</span>
+                    </h2>
+                    <div class="card-actions">
+                        <button class="btn btn-primary" onclick="showRuleBuilder()">
+                            <span class="btn-icon">➕</span>
+                            Create Rule
+                        </button>
+                    </div>
+                </div>
+
+                <div class="rules-list" id="rulesList">
+                    <div class="loading-spinner">
+                        <div class="spinner"></div>
+                        <p>Loading rules...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Rule Templates -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">📋</span>
+                    Quick Templates
+                </h2>
+                <div class="templates-grid">
+                    <div class="template-card" onclick="useTemplate('surplus')">
+                        <div class="template-icon">☀️</div>
+                        <h3>Use Solar Surplus</h3>
+                        <p>Activate devices when exporting energy to grid</p>
+                    </div>
+                    <div class="template-card" onclick="useTemplate('prevent-import')">
+                        <div class="template-icon">🚫</div>
+                        <h3>Prevent Import</h3>
+                        <p>Turn off devices when importing from grid</p>
+                    </div>
+                    <div class="template-card" onclick="useTemplate('time-based')">
+                        <div class="template-icon">⏰</div>
+                        <h3>Time Schedule</h3>
+                        <p>Control devices based on time</p>
+                    </div>
+                    <div class="template-card" onclick="useTemplate('priority')">
+                        <div class="template-icon">🎚️</div>
+                        <h3>Priority Loading</h3>
+                        <p>Cascade devices by priority</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Tab -->
+        <section class="tab-content" id="settings">
+            <!-- WiFi Settings -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">📶</span>
+                    WiFi Configuration
+                </h2>
+                <form id="wifiForm" onsubmit="saveWiFiConfig(event)">
+                    <div class="form-group">
+                        <label for="wifiSsid">Network SSID</label>
+                        <input type="text" id="wifiSsid" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="wifiPassword">Password</label>
+                        <input type="password" id="wifiPassword" class="form-input">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="btn-icon">💾</span>
+                        Save & Connect
+                    </button>
+                </form>
+            </div>
+
+            <!-- System Info -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">ℹ️</span>
+                    System Information
+                </h2>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">Firmware Version</div>
+                        <div class="info-value" id="firmwareVersion">—</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Uptime</div>
+                        <div class="info-value" id="systemUptime">—</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">WiFi SSID</div>
+                        <div class="info-value" id="wifiConnected">—</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">IP Address</div>
+                        <div class="info-value" id="ipAddress">—</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Signal Strength</div>
+                        <div class="info-value" id="wifiRssi">—</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Free Memory</div>
+                        <div class="info-value" id="freeMemory">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Settings -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">⚙️</span>
+                    Advanced Settings
+                </h2>
+
+                <div class="form-group">
+                    <label for="pollInterval">Device Poll Interval (seconds)</label>
+                    <input type="number" id="pollInterval" class="form-input" min="1" max="60" value="5">
+                </div>
+
+                <div class="form-group">
+                    <label for="energyPrice">Energy Price (PLN/kWh)</label>
+                    <input type="number" id="energyPrice" class="form-input" min="0" step="0.01" value="0.80">
+                </div>
+
+                <div class="form-check">
+                    <input type="checkbox" id="enableTelemetry" checked>
+                    <label for="enableTelemetry">Enable Telemetry</label>
+                </div>
+
+                <div class="form-check">
+                    <input type="checkbox" id="enableDebug">
+                    <label for="enableDebug">Enable Debug Logging</label>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveAdvancedSettings()">
+                    <span class="btn-icon">💾</span>
+                    Save Settings
+                </button>
+            </div>
+
+            <!-- Backup & Restore -->
+            <div class="glass-card">
+                <h2 class="card-title">
+                    <span class="title-icon">💾</span>
+                    Backup & Restore
+                </h2>
+                <div class="backup-actions">
+                    <button class="btn btn-secondary" onclick="exportConfig()">
+                        <span class="btn-icon">📤</span>
+                        Export Configuration
+                    </button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()">
+                        <span class="btn-icon">📥</span>
+                        Import Configuration
+                    </button>
+                    <input type="file" id="importFile" style="display: none" accept=".json" onchange="importConfig(event)">
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <div class="glass-card danger-card">
+                <h2 class="card-title">
+                    <span class="title-icon">⚠️</span>
+                    Danger Zone
+                </h2>
+                <div class="danger-actions">
+                    <button class="btn btn-danger" onclick="resetConfig()">
+                        <span class="btn-icon">🔄</span>
+                        Reset Configuration
+                    </button>
+                    <button class="btn btn-danger" onclick="restartDevice()">
+                        <span class="btn-icon">🔄</span>
+                        Restart ESP32
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modals -->
+    <!-- Manual Add Device Modal -->
+    <div class="modal" id="addDeviceModal">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <h2>Add Device Manually</h2>
+                <button class="modal-close" onclick="closeModal('addDeviceModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addDeviceForm" onsubmit="addDeviceManually(event)">
+                    <div class="form-group">
+                        <label for="deviceMac">MAC Address *</label>
+                        <input type="text" id="deviceMac" class="form-input" placeholder="AA:BB:CC:DD:EE:FF" required pattern="[0-9A-Fa-f:]{17}">
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceName">Device Name *</label>
+                        <input type="text" id="deviceName" class="form-input" placeholder="e.g., Water Heater" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="deviceIp">IP Address (optional)</label>
+                        <input type="text" id="deviceIp" class="form-input" placeholder="192.168.1.50">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('addDeviceModal')">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Device</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rule Builder Modal -->
+    <div class="modal modal-large" id="ruleBuilderModal">
+        <div class="modal-content glass">
+            <div class="modal-header">
+                <h2>Rule Builder</h2>
+                <button class="modal-close" onclick="closeModal('ruleBuilderModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="ruleBuilderForm" onsubmit="saveRule(event)">
+                    <div class="form-group">
+                        <label for="ruleName">Rule Name *</label>
+                        <input type="text" id="ruleName" class="form-input" placeholder="e.g., Activate Boiler on Surplus" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Rule Priority</label>
+                        <input type="number" id="rulePriority" class="form-input" min="1" max="100" value="10">
+                        <small>Lower number = higher priority (executed first)</small>
+                    </div>
+
+                    <div class="rule-section">
+                        <h3>Conditions</h3>
+                        <div id="conditionsContainer">
+                            <!-- Conditions will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addCondition()">
+                            <span class="btn-icon">➕</span>
+                            Add Condition
+                        </button>
+                    </div>
+
+                    <div class="rule-section">
+                        <h3>Actions</h3>
+                        <div id="actionsContainer">
+                            <!-- Actions will be added here dynamically -->
+                        </div>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="addAction()">
+                            <span class="btn-icon">➕</span>
+                            Add Action
+                        </button>
+                    </div>
+
+                    <div class="rule-section">
+                        <h3>Advanced Options</h3>
+                        <div class="form-group">
+                            <label for="ruleHysteresis">Hysteresis (W)</label>
+                            <input type="number" id="ruleHysteresis" class="form-input" value="200" min="0">
+                            <small>Prevents oscillation between states</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="ruleDelayOn">Delay ON (seconds)</label>
+                            <input type="number" id="ruleDelayOn" class="form-input" value="60" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="ruleDelayOff">Delay OFF (seconds)</label>
+                            <input type="number" id="ruleDelayOff" class="form-input" value="300" min="0">
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="ruleEnabled" checked>
+                            <label for="ruleEnabled">Enable rule immediately</label>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('ruleBuilderModal')">Cancel</button>
+                        <button type="button" class="btn btn-outline" onclick="testRule()">Test Rule</button>
+                        <button type="submit" class="btn btn-primary">Save Rule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <div class="toast-icon"></div>
+        <div class="toast-message"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+# Pistachio Smart Controller - Git Ignore
+
+# Secrets (NEVER commit these!)
+include/secrets.h
+
+# PlatformIO
+.pio/
+.vscode/
+.clang_complete
+.gcc-flags.json
+
+# Build artifacts
+*.o
+*.elf
+*.bin
+*.hex
+*.map
+
+# IDE files
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+
+# Node modules (if using web build tools)
+node_modules/
+package-lock.json
+
+# Compiled web assets (if pre-compiling)
+data/bundle.js
+data/bundle.css
+
+# Test coverage
+coverage/
+*.gcov
+*.gcda
+*.gcno
+
+# Documentation build
+docs/_build/
+docs/.doctrees/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.directory
+
+# Certificates and keys (if any)
+*.pem
+*.key
+*.crt
+*.p12
+
+# Database files (if storing locally)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+backup/
+*.backup
