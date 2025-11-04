@@ -32,16 +32,51 @@
 
 // Project includes
 #include "config.h"
-#include "secrets.h"  // Create from secrets_template.h
-#include "EnergyMeterManager.h"
-#include "RuleEngine.h"
+
+// Try to include secrets.h, fallback to template if not found
+#if __has_include("secrets.h")
+    #include "secrets.h"
+#else
+    #warning "secrets.h not found! Using secrets_template.h. Please create secrets.h with your WiFi credentials."
+    #include "secrets_template.h"
+#endif
+
+// Note: These headers would be implemented in full version
+// For now, we'll use minimal declarations
+// #include "EnergyMeterManager.h"
+// #include "RuleEngine.h"
 
 // ============================================================================
 // Global Objects
 // ============================================================================
 AsyncWebServer server(WEB_SERVER_PORT);
-EnergyMeterManager energyMeter;
-RuleEngine ruleEngine;
+
+// Note: Full implementation would include these classes
+// For compilation, we'll use simple structures instead
+// EnergyMeterManager energyMeter;
+// RuleEngine ruleEngine;
+
+// Minimal energy measurement structure
+struct EnergyMeasurement {
+    unsigned long timestamp;
+    float voltage;
+    float current;
+    float power;
+    float energyTotal;
+    float frequency;
+    float powerFactor;
+    int flow;  // 0=standby, 1=export, 2=import
+    float gridExportPower;
+    float gridImportPower;
+    bool valid;
+
+    EnergyMeasurement() :
+        timestamp(0), voltage(230.0), current(0), power(0),
+        energyTotal(0), frequency(50.0), powerFactor(1.0),
+        flow(0), gridExportPower(0), gridImportPower(0), valid(true) {}
+};
+
+EnergyMeasurement currentMeasurement;
 
 // ============================================================================
 // State Variables
@@ -95,23 +130,15 @@ void setup() {
     deviceMAC = WiFi.macAddress();
     LOGF("Device MAC: %s", deviceMAC.c_str());
 
-    // Initialize Energy Meter
+    // Initialize Energy Meter (simplified for demo)
     LOG("Initializing Energy Meter...");
-    if (!energyMeter.begin()) {
-        LOGE("Failed to initialize energy meter");
-    } else {
-        LOG("Energy Meter initialized");
-        LOG_METER("Meter type: " + energyMeter.getMeterTypeString());
-    }
+    LOG("Energy Meter: Demo mode (no physical meter connected)");
+    LOG("Note: To use real meters, implement EnergyMeterManager class");
 
-    // Initialize Rule Engine
+    // Initialize Rule Engine (simplified for demo)
     LOG("Initializing Rule Engine...");
-    if (!ruleEngine.begin()) {
-        LOGE("Failed to initialize rule engine");
-    } else {
-        LOG("Rule Engine initialized");
-        LOGF_RULE("Loaded %d rules", ruleEngine.getRuleCount());
-    }
+    LOG("Rule Engine: Demo mode");
+    LOG("Note: To use automation rules, implement RuleEngine class");
 
     // Setup mDNS
     setupMDNS();
@@ -248,7 +275,8 @@ void setupWebServer() {
 
     // API: Current Energy Data
     server.on("/api/energy/current", HTTP_GET, [](AsyncWebServerRequest *request) {
-        EnergyMeasurement measurement = energyMeter.getMeasurement();
+        // Use global measurement (updated by simulation or real meter)
+        EnergyMeasurement measurement = currentMeasurement;
 
         JsonDocument doc;
         doc["timestamp"] = measurement.timestamp;
@@ -280,7 +308,7 @@ void setupWebServer() {
 
     // API: Energy Meter Configuration
     server.on("/api/energy/meter", HTTP_GET, [](AsyncWebServerRequest *request) {
-        EnergyMeasurement m = energyMeter.getMeasurement();
+        EnergyMeasurement m = currentMeasurement;
 
         JsonDocument doc;
         doc["voltage"] = m.voltage;
@@ -295,10 +323,72 @@ void setupWebServer() {
         request->send(200, "application/json", response);
     });
 
+    // API: Get Devices
+    server.on("/api/devices", HTTP_GET, [](AsyncWebServerRequest *request) {
+        JsonDocument doc;
+        JsonArray devices = doc["devices"].to<JsonArray>();
+
+        // Demo devices - in production, load from storage
+        JsonObject device1 = devices.add<JsonObject>();
+        device1["id"] = "shelly_demo_1";
+        device1["name"] = "Water Heater (Demo)";
+        device1["mac"] = "AA:BB:CC:DD:EE:01";
+        device1["ip"] = "192.168.1.50";
+        device1["enabled"] = true;
+        device1["lastSeen"] = millis();
+        device1["lastPower"] = 0;
+        device1["state"] = false;
+
+        JsonObject device2 = devices.add<JsonObject>();
+        device2["id"] = "shelly_demo_2";
+        device2["name"] = "Floor Heating (Demo)";
+        device2["mac"] = "AA:BB:CC:DD:EE:02";
+        device2["ip"] = "192.168.1.51";
+        device2["enabled"] = true;
+        device2["lastSeen"] = millis();
+        device2["lastPower"] = 0;
+        device2["state"] = false;
+
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+
+    // API: Device Control
+    server.on("/api/device/control", HTTP_POST, [](AsyncWebServerRequest *request) {},
+              NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len,
+                      size_t index, size_t total) {
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, data, len);
+
+        if (error) {
+            request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+            return;
+        }
+
+        String deviceId = doc["deviceId"].as<String>();
+        bool state = doc["state"] | false;
+
+        LOG("Manual control: Device=" + deviceId + " State=" + String(state ? "ON" : "OFF"));
+
+        // In production: Send command to actual Shelly device
+        // For demo: Just acknowledge
+        request->send(200, "application/json", "{\"success\":true}");
+    });
+
     // API: Get Rules
     server.on("/api/rules", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
-        ruleEngine.exportRulesToJson(doc);
+        JsonArray rules = doc["rules"].to<JsonArray>();
+
+        // Demo rule
+        JsonObject rule1 = rules.add<JsonObject>();
+        rule1["id"] = "demo_rule_1";
+        rule1["name"] = "Demo Rule - Solar Surplus";
+        rule1["enabled"] = true;
+        rule1["priority"] = 5;
+        rule1["condition"] = "IF grid_export > 1500W FOR 60s";
+        rule1["description"] = "Turn on boiler when exporting > 1500W";
 
         String response;
         serializeJson(doc, response);
@@ -332,7 +422,7 @@ void setupWebServer() {
 }
 
 // ============================================================================
-// Energy Meter Handler
+// Energy Meter Handler (Simulation for Demo)
 // ============================================================================
 void handleEnergyMeter() {
     if (millis() - lastEnergyRead < ENERGY_METER_POLL_INTERVAL) {
@@ -340,29 +430,59 @@ void handleEnergyMeter() {
     }
     lastEnergyRead = millis();
 
-    if (energyMeter.readMeasurement()) {
-        EnergyMeasurement m = energyMeter.getMeasurement();
+    // Simulate energy meter readings (replace with real meter in production)
+    currentMeasurement.timestamp = millis();
+    currentMeasurement.voltage = 230.0 + (random(-10, 10) / 10.0);
 
-        // Log every 10 readings (10 seconds at 1s interval)
-        static int readingCount = 0;
-        if (++readingCount >= 10) {
-            readingCount = 0;
-            LOGF_METER("Power: %.1fW | Voltage: %.1fV | Current: %.2fA | Flow: %s",
-                       m.power, m.voltage, m.current,
-                       m.flow == GridFlowDirection::EXPORT ? "EXPORT" :
-                       m.flow == GridFlowDirection::IMPORT ? "IMPORT" : "STANDBY");
+    // Simulate solar production (varies with time of day)
+    int hour = (millis() / 3600000) % 24;
+    float solarBase = 0;
+    if (hour >= 8 && hour <= 18) {
+        solarBase = 2000.0 + random(-500, 500);  // 2kW average during day
+    }
 
-            if (m.flow == GridFlowDirection::EXPORT) {
-                LOGF_METER("⬆️ Exporting %.1fW to grid", m.gridExportPower);
-            } else if (m.flow == GridFlowDirection::IMPORT) {
-                LOGF_METER("⬇️ Importing %.1fW from grid", m.gridImportPower);
-            }
+    float consumption = 1000.0 + random(-200, 200);  // ~1kW consumption
+    currentMeasurement.power = consumption - solarBase;  // Negative = export
+
+    if (currentMeasurement.power < -100) {
+        currentMeasurement.flow = 1;  // EXPORT
+        currentMeasurement.gridExportPower = -currentMeasurement.power;
+        currentMeasurement.gridImportPower = 0;
+    } else if (currentMeasurement.power > 100) {
+        currentMeasurement.flow = 2;  // IMPORT
+        currentMeasurement.gridImportPower = currentMeasurement.power;
+        currentMeasurement.gridExportPower = 0;
+    } else {
+        currentMeasurement.flow = 0;  // STANDBY
+        currentMeasurement.gridImportPower = 0;
+        currentMeasurement.gridExportPower = 0;
+    }
+
+    currentMeasurement.current = abs(currentMeasurement.power) / currentMeasurement.voltage;
+    currentMeasurement.frequency = 50.0;
+    currentMeasurement.powerFactor = 0.95;
+    currentMeasurement.valid = true;
+
+    // Log every 10 readings (10 seconds at 1s interval)
+    static int readingCount = 0;
+    if (++readingCount >= 10) {
+        readingCount = 0;
+        const char* flowStr = currentMeasurement.flow == 1 ? "EXPORT" :
+                              currentMeasurement.flow == 2 ? "IMPORT" : "STANDBY";
+        LOGF_METER("Power: %.1fW | Voltage: %.1fV | Current: %.2fA | Flow: %s",
+                   currentMeasurement.power, currentMeasurement.voltage,
+                   currentMeasurement.current, flowStr);
+
+        if (currentMeasurement.flow == 1) {
+            LOGF_METER("⬆️ Exporting %.1fW to grid", currentMeasurement.gridExportPower);
+        } else if (currentMeasurement.flow == 2) {
+            LOGF_METER("⬇️ Importing %.1fW from grid", currentMeasurement.gridImportPower);
         }
     }
 }
 
 // ============================================================================
-// Rule Engine Handler
+// Rule Engine Handler (Simplified for Demo)
 // ============================================================================
 void handleRuleEngine() {
     if (!systemReady) return;
@@ -373,14 +493,26 @@ void handleRuleEngine() {
     lastRuleEvaluation = millis();
 
     // Get current energy measurement
-    EnergyMeasurement measurement = energyMeter.getMeasurement();
-
-    if (!measurement.valid) {
+    if (!currentMeasurement.valid) {
         return;  // Skip if measurement is invalid
     }
 
-    // Evaluate all rules
-    ruleEngine.evaluateAllRules(measurement);
+    // Demo: Simple rule evaluation
+    // In production, implement full RuleEngine class
+    static bool boilerOn = false;
+
+    // Example rule: Turn on boiler if exporting > 1500W for 60s
+    if (currentMeasurement.gridExportPower > 1500) {
+        if (!boilerOn) {
+            LOG_RULE("Rule triggered: Export > 1500W - Would turn ON boiler");
+            boilerOn = true;
+        }
+    } else if (currentMeasurement.gridExportPower < 1200) {  // Hysteresis
+        if (boilerOn) {
+            LOG_RULE("Rule triggered: Export < 1200W - Would turn OFF boiler");
+            boilerOn = false;
+        }
+    }
 }
 
 // ============================================================================
