@@ -387,9 +387,6 @@ void setupMDNS() {
 void setupWebServer() {
     LOG("Setting up web server...");
 
-    // Serve static files from LittleFS
-    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
-
     // API: System Status
     server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
         JsonDocument doc;
@@ -576,8 +573,9 @@ void setupWebServer() {
         device1["mac"] = "AA:BB:CC:DD:EE:01";
         device1["ip"] = "192.168.1.50";
         device1["enabled"] = true;
+        device1["online"] = true;
         device1["lastSeen"] = millis();
-        device1["lastPower"] = 0;
+        device1["lastPower"] = 1200.5;
         device1["state"] = false;
 
         JsonObject device2 = devices.add<JsonObject>();
@@ -586,9 +584,10 @@ void setupWebServer() {
         device2["mac"] = "AA:BB:CC:DD:EE:02";
         device2["ip"] = "192.168.1.51";
         device2["enabled"] = true;
+        device2["online"] = true;
         device2["lastSeen"] = millis();
-        device2["lastPower"] = 0;
-        device2["state"] = false;
+        device2["lastPower"] = 850.3;
+        device2["state"] = true;
 
         String response;
         serializeJson(doc, response);
@@ -651,9 +650,14 @@ void setupWebServer() {
         request->send(200, "application/json", response);
     });
 
+    // Serve static files from LittleFS (MUST be after all API routes!)
+    server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+
     // 404 Handler
     server.onNotFound([](AsyncWebServerRequest *request) {
-        request->send(404, "text/plain", "Not found");
+        String path = request->url();
+        LOGF("404 Not Found: %s", path.c_str());
+        request->send(404, "text/plain", "Not found: " + path);
     });
 
     server.begin();
